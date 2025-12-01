@@ -29,7 +29,7 @@ chmod +x install.sh
 If you prefer to install manually, you must ensure you have Node.js v20+ (default apt version is too old) and the yt-dlp zip bundle.
 
 Install Dependencies:
-
+```bash
 # Remove old Node
 sudo apt remove -y nodejs npm
 # Add Node v20 Repo
@@ -45,7 +45,7 @@ sudo unzip -o yt-dlp_linux_armv7l.zip -d /opt/yt-dlp/
 sudo chmod +x /opt/yt-dlp/yt-dlp_linux_armv7l
 sudo ln -sf /opt/yt-dlp/yt-dlp_linux_armv7l /usr/local/bin/yt-dlp
 
-Build & Run:
+Build:
 
 git clone [https://github.com/JaragonCR/pitube-karaoke.git](https://github.com/JaragonCR/pitube-karaoke.git)
 cd pitube-karaoke
@@ -53,7 +53,30 @@ go mod init pitube
 go get modernc.org/sqlite
 go mod tidy
 go build -o pitube
+```
+
+Run Manually
+
 ./run.sh
+```
+
+Setup Autostart: To make it start on boot, create this file:
+
+```bash
+mkdir -p ~/.config/autostart
+nano ~/.config/autostart/pitube.desktop
+```
+
+Paste this (update /home/YOUR_USER to your actual path):
+
+```bash
+[Desktop Entry]
+Type=Application
+Name=PiTube Karaoke
+Exec=/home/YOUR_USER/pitube-karaoke/run.sh
+Terminal=false
+Hidden=false
+```
 
 🍪 Fixing 403 Forbidden Errors (Optional)
 YouTube aggressively blocks server IP addresses (Data Center IPs). If downloads fail instantly, you must provide your browser cookies to prove you are human.
