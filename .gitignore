@@ -1,0 +1,17 @@
+# Binaries
+pitube
+pitube_debug.log
+pitube_runtime.log
+
+# Data
+downloads/
+pitube.db
+pitube.db-shm
+pitube.db-wal
+
+# Sensitive Info (NEVER UPLOAD THIS)
+cookies.txt
+
+# Generated UI Assets
+qr.png
+background.png
