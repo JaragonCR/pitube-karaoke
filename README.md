@@ -4,6 +4,8 @@ A dedicated, self-hosted Karaoke appliance designed specifically for the **Raspb
 
 It turns your Pi into a Kiosk that displays a QR code on your TV. Guests scan the code to search for songs, queue them up, and control playback from their phones.
 
+
+
 > **⚠️ HARDWARE REQUIREMENT:** This project is **NOT Headless**. It requires a TV/Monitor connected via HDMI to function. It relies on the X11 window system to display the video and overlay text.
 
 ## 🚀 Why this fork?
