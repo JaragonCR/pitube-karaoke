@@ -24,7 +24,7 @@ Run this single command on your Raspberry Pi:
 wget [https://raw.githubusercontent.com/JaragonCR/pitube-karaoke/main/install.sh](https://raw.githubusercontent.com/JaragonCR/pitube-karaoke/main/install.sh)
 chmod +x install.sh
 ./install.sh
-
+```
 ⚙️ Manual Installation (The Hard Way)
 If you prefer to install manually, you must ensure you have Node.js v20+ (default apt version is too old) and the yt-dlp zip bundle.
 
