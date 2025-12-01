@@ -22,23 +22,20 @@ echo -e "${GREEN}=========================================${NC}"
 log_info "Upgrading Node.js to v20 (Required for yt-dlp speed)..."
 sudo apt remove -y nodejs npm
 sudo apt autoremove -y
-# Add NodeSource repo
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt update
 sudo apt install -y nodejs
-# Verify version
 NODE_VER=$(node -v)
 log_info "Node.js installed: $NODE_VER"
 
 # 2. INSTALL SYSTEM DEPENDENCIES
 log_info "Installing system tools (mpv, ffmpeg, kiosk utils)..."
 sudo apt install -y golang ffmpeg mpv python3 unclutter x11-xserver-utils qrencode imagemagick git unzip
-# Fix potential node binary naming issue
 if [ ! -f /usr/local/bin/node ]; then
     sudo ln -sf /usr/bin/nodejs /usr/local/bin/node
 fi
 
-# 3. INSTALL YT-DLP (Zip Bundle Method)
+# 3. INSTALL YT-DLP (Zip Bundle)
 log_info "Installing yt-dlp..."
 sudo rm -f /usr/local/bin/yt-dlp
 rm -f /tmp/yt-dlp_linux_armv7l.zip
@@ -66,7 +63,7 @@ go mod tidy
 go build -o pitube
 chmod +x run.sh gen_ui.sh
 
-# 5. SETUP AUTOSTART
+# 5. SETUP AUTOSTART (Autorun on Boot)
 log_info "Configuring Autostart..."
 mkdir -p "$HOME/.config/autostart"
 cat << EOF > "$HOME/.config/autostart/pitube.desktop"
