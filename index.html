@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PiTube Karaoke</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 15px; background: #121212; color: #fff; }
+        .card { background: #1e1e1e; padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #333; }
+        .input-group { display: flex; gap: 8px; margin-top: 10px; }
+        input[type="text"] { padding: 12px; border-radius: 8px; border: 1px solid #444; background: #2c2c2c; color: white; font-size: 16px; width: 100%; box-sizing: border-box; }
+        button { padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .btn-search { background: #03dac6; color: black; width: 100px; }
+        .btn-select { background: #bb86fc; color: black; width: 100%; margin-top: 10px; }
+        #search-results { display: none; margin-top: 15px; }
+        .result-item { display: flex; gap: 15px; background: #252525; padding: 10px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #333; }
+        .result-thumb { width: 120px; height: 90px; object-fit: cover; border-radius: 4px; background: #000; }
+        .result-info { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+        .result-title { font-weight: bold; font-size: 0.95em; margin-bottom: 5px; line-height: 1.2; }
+        .result-meta { color: #aaa; font-size: 0.85em; }
+        #singer-display { display: none; background: #2a2a2a; padding: 10px; border-radius: 8px; border: 1px solid #bb86fc; color: #bb86fc; justify-content: space-between; align-items: center; }
+        .change-link { color: #fff; font-size: 0.8em; text-decoration: underline; cursor: pointer; }
+        .now-playing { border: 2px solid #03dac6; text-align: center; background: #121212; }
+        .playing-song { font-size: 1.4em; font-weight: bold; margin: 10px 0; }
+        .playing-time { font-size: 1.2em; color: #03dac6; margin-bottom: 10px; font-family: monospace; }
+        .queue-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #333; }
+        .singer-name { color: #bb86fc; font-weight: bold; font-size: 0.9em; }
+        .status-downloading { color: #03dac6; font-weight: bold; }
+        .status-finalizing { color: #bb86fc; font-weight: bold; animation: pulse 1s infinite; }
+        .progress-bar-bg { width: 100%; height: 6px; background: #333; margin-top: 5px; border-radius: 3px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; background: #03dac6; width: 0%; transition: width 0.5s; }
+        .progress-bar-striped { width: 100%; background: repeating-linear-gradient(45deg, #bb86fc, #bb86fc 10px, #9955e8 10px, #9955e8 20px); animation: shift 1s linear infinite; }
+        @keyframes pulse { 50% { opacity: 0.5; } }
+        @keyframes shift { from { background-position: 0 0; } to { background-position: 50px 0; } }
+        h3 { color: #888; border-bottom: 1px solid #333; padding-bottom: 5px; margin-top: 30px; }
+        .footer { margin-top: 50px; text-align: right; border-top: 1px solid #333; padding-top: 10px; }
+        .update-link { color: #555; font-size: 0.8em; text-decoration: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center; color: #bb86fc;">🎤 PiTube</h1>
+    <div class="card">
+        <div id="singer-input-container">
+            <input type="text" id="singer-name" placeholder="Enter Your Name (Singer)" autocomplete="off">
+        </div>
+        <div id="singer-display">
+            <span>🎤 <span id="current-singer-name"></span></span>
+            <span class="change-link" onclick="resetSinger()">Change</span>
+        </div>
+        <div class="input-group">
+            <input type="text" id="search-query" placeholder="Song Name (e.g. Frank Sinatra My Way)..." autocomplete="off" onkeypress="handleEnter(event)">
+            <button class="btn-search" onclick="doSearch()" id="search-btn">Search</button>
+        </div>
+        <div id="search-status" style="text-align:center; color:#777; margin-top:10px; display:none;">Searching...</div>
+        <div id="search-results"></div>
+    </div>
+    <div id="queue-container"></div>
+    <h3>📚 Song Library</h3>
+    <div id="history-container"></div>
+    
+    <div class="footer">
+        <span onclick="doUpdate()" class="update-link">Update System (yt-dlp)</span>
+    </div>
+
+    <script>
+        function loadSinger() {
+            const savedName = localStorage.getItem('pitube_singer');
+            if (savedName) {
+                document.getElementById('singer-name').value = savedName;
+                document.getElementById('current-singer-name').innerText = savedName;
+                document.getElementById('singer-input-container').style.display = 'none';
+                document.getElementById('singer-display').style.display = 'flex';
+            } else {
+                document.getElementById('singer-input-container').style.display = 'block';
+                document.getElementById('singer-display').style.display = 'none';
+            }
+        }
+        function resetSinger() {
+            localStorage.removeItem('pitube_singer');
+            document.getElementById('singer-name').value = '';
+            loadSinger();
+        }
+        function handleEnter(e) { if(e.key === 'Enter') doSearch(); }
+        function doSearch() {
+            const query = document.getElementById('search-query').value;
+            if (!query) return;
+            document.getElementById('search-status').style.display = 'block';
+            document.getElementById('search-results').innerHTML = '';
+            document.getElementById('search-btn').disabled = true;
+            fetch('/api/search?q=' + encodeURIComponent(query))
+                .then(r => r.json())
+                .then(results => {
+                    document.getElementById('search-status').style.display = 'none';
+                    document.getElementById('search-btn').disabled = false;
+                    document.getElementById('search-results').style.display = 'block';
+                    let html = '';
+                    results.forEach(res => {
+                        html += `
+                        <div class="result-item">
+                            <img class="result-thumb" src="${res.thumbnail}">
+                            <div class="result-info">
+                                <div class="result-title">${res.title}</div>
+                                <div class="result-meta">${res.uploader}</div>
+                                <button class="btn-select" onclick="addSong('${res.url}', '${res.title.replace(/'/g, "\\'")}')">Select This Song</button>
+                            </div>
+                        </div>`;
+                    });
+                    document.getElementById('search-results').innerHTML = html;
+                })
+                .catch(() => {
+                    document.getElementById('search-status').innerText = "Error searching.";
+                    document.getElementById('search-btn').disabled = false;
+                });
+        }
+        function addSong(url, title) {
+            const nameInput = document.getElementById('singer-name');
+            let singer = nameInput.value.trim();
+            if (!singer) { alert("Please enter your name first!"); return; }
+            localStorage.setItem('pitube_singer', singer);
+            loadSinger();
+            const formData = new URLSearchParams();
+            formData.append('singer', singer);
+            formData.append('url', url);
+            formData.append('title', title);
+            fetch('/add', { method: 'POST', body: formData }).then(() => {
+                document.getElementById('search-query').value = '';
+                document.getElementById('search-results').style.display = 'none';
+                fetchData();
+            });
+        }
+        function retryJob(id) {
+            fetch('/api/retry?id=' + id).then(() => fetchData());
+        }
+        function doUpdate() {
+            if(confirm("Update system components? This will take about 30 seconds.")) {
+                fetch('/api/update_ytdlp').then(() => alert("Update complete!"));
+            }
+        }
+        function fetchData() {
+            fetch('/api/data').then(r => r.json()).then(data => render(data));
+        }
+        function render(data) {
+            const qContainer = document.getElementById('queue-container');
+            const hContainer = document.getElementById('history-container');
+            let qHtml = '';
+            data.queue.forEach(job => {
+                if (job.status === 'playing') {
+                    const time = job.time_left || '--:--';
+                    qHtml += `
+                    <div class="card now-playing">
+                        <div style="color:#03dac6; font-size:0.8em; letter-spacing:1px;">NOW PERFORMING</div>
+                        <div class="playing-song">${job.title}</div>
+                        <div class="playing-singer">🎤 ${job.singer}</div>
+                        <div class="playing-time">${time} remaining</div>
+                        <a href="/skip" style="display:inline-block; margin-top:10px; padding:8px 15px; background:#cf6679; color:black; text-decoration:none; border-radius:20px; font-weight:bold; font-size:0.9em;">Skip Song</a>
+                    </div>`;
+                } else {
+                    let progressHtml = '';
+                    let statusText = job.status;
+                    let rowStyle = '';
+                    let actionBtn = '';
+                    
+                    if (job.status === 'downloading') {
+                        const val = job.progress || '0%';
+                        if (val === 'Finalizing') {
+                            statusText = `<span class="status-finalizing">Adding to library...</span>`;
+                            progressHtml = `<div class="progress-bar-bg"><div class="progress-bar-fill progress-bar-striped"></div></div>`;
+                        } else {
+                            statusText = `<span class="status-downloading">Downloading... ${val}</span>`;
+                            progressHtml = `<div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${val}"></div></div>`;
+                        }
+                    }
+                    if (job.status === 'failed') {
+                        statusText = `<span style="color:#ff4444; font-weight:bold;">⚠️ Download Failed</span>`;
+                        rowStyle = 'border-left: 3px solid #ff4444; padding-left: 10px;';
+                        actionBtn = `<button style="background:#333; color:#fff; border:1px solid #555; margin-right:5px; cursor:pointer;" onclick="retryJob(${job.id})">Retry</button>`;
+                    }
+                    qHtml += `
+                    <div class="queue-item" style="${rowStyle}">
+                        <div style="flex:1">
+                            <div class="singer-name">${job.singer}</div>
+                            <div style="font-weight:500;">${job.title}</div>
+                            <div style="font-size:0.8em; color:#777;">${statusText}</div>
+                            ${progressHtml}
+                        </div>
+                        <div>${actionBtn}<a href="/delete?id=${job.id}" style="color:#cf6679; text-decoration:none; padding:10px; font-size:1.2em;">✕</a></div>
+                    </div>`;
+                }
+            });
+            qContainer.innerHTML = qHtml || '<div style="text-align:center; color:#555;">Queue is empty</div>';
+            let hHtml = '';
+            data.history.forEach(job => {
+                hHtml += `
+                <div class="queue-item">
+                    <div style="flex:1; font-size:0.9em;">${job.title}</div>
+                    <button style="background:#333; color:#03dac6; padding:5px 10px; font-size:0.8em; border:none; border-radius:4px; cursor:pointer;" onclick="addSong('${job.url}', '${job.title.replace(/'/g, "\\'")}')">Sing Again</button>
+                </div>`;
+            });
+            hContainer.innerHTML = hHtml;
+        }
+        loadSinger();
+        fetchData();
+        setInterval(fetchData, 1000);
+    </script>
+</body>
+</html>
