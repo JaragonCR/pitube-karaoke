@@ -21,9 +21,13 @@ Running on **Raspberry Pi OS (Legacy/Bullseye or Bookworm)** with Desktop.
 sudo apt update
 sudo apt install -y golang ffmpeg mpv python3 unclutter x11-xserver-utils qrencode imagemagick nodejs
 
-# 2. Install yt-dlp (The Downloader)
-# Note: Do not use apt for yt-dlp, it is too old. Use the official binary.
-sudo wget [https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l](https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l) -O /usr/local/bin/yt-dlp
+### 2. Install yt-dlp (The Downloader)
+# The Pi 3B+ requires the armv7l zip bundle to get a modern Python version.
+cd /tmp
+wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l.zip
+sudo mkdir -p /opt/yt-dlp
+sudo unzip -o yt-dlp_linux_armv7l.zip -d /opt/yt-dlp/
+sudo ln -sf /opt/yt-dlp/yt-dlp_linux_armv7l /usr/local/bin/yt-dlp
 sudo chmod a+rx /usr/local/bin/yt-dlp
 
 📦 Installation
@@ -66,7 +70,7 @@ Paste this content:
 [Desktop Entry]
 Type=Application
 Name=PiTube Karaoke
-Exec=/home/pi/pitube-karaoke/run.sh
+Exec=/home/<yourname>/pitube-karaoke/run.sh
 Terminal=false
 Hidden=false
 
