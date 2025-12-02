@@ -7,11 +7,10 @@ URL="http://$IP:8080"
 echo "Detected IP: $IP"
 echo "Generating Kiosk UI..."
 
-# 2. Generate QR Code for the URL
+# 2. Generate QR Code
 qrencode -o qr.png -s 10 -l H -m 2 "$URL"
 
 # 3. Create the Background Image (1920x1080)
-# Uses ImageMagick to compose text and QR code
 convert -size 1920x1080 xc:black \
     -font DejaVu-Sans-Bold -pointsize 100 -fill "#bb86fc" -gravity North -annotate +0+100 "PiTube Karaoke" \
     -font DejaVu-Sans -pointsize 60 -fill white -gravity Center -annotate +0-100 "Scan to Sing! 📷" \
@@ -19,4 +18,9 @@ convert -size 1920x1080 xc:black \
     qr.png -gravity SouthEast -geometry +50+50 -composite \
     background.png
 
-echo "Done! background.png created."
+# 4. APPLY AS WALLPAPER (The Magic Step)
+# This forces the desktop background to update immediately
+export DISPLAY=:0
+pcmanfm --set-wallpaper "$(pwd)/background.png" --wallpaper-mode=fit
+
+echo "Done! Wallpaper updated."
