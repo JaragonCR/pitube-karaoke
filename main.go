@@ -34,6 +34,7 @@ const (
 	MaxLogSize      = 1 * 1024 * 1024 // 1MB
 )
 
+// Massive API List for redundancy
 var InvidiousInstances = []string{
 	"https://invidious.jing.rocks/api/v1/search",
 	"https://invidious.nerdvpn.de/api/v1/search",
@@ -64,22 +65,14 @@ type LogRotator struct {
 func (l *LogRotator) Write(p []byte) (n int, err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
-	// Check file size
 	info, err := os.Stat(LogFile)
 	if err == nil && info.Size() >= MaxLogSize {
-		// Rotate: .log -> .old
 		os.Remove(LogFile + ".old")
 		os.Rename(LogFile, LogFile+".old")
 	}
-
-	// Open file in append mode
 	f, err := os.OpenFile(LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		return 0, err
-	}
+	if err != nil { return 0, err }
 	defer f.Close()
-
 	return f.Write(p)
 }
 
@@ -121,13 +114,8 @@ type PageData struct {
 }
 
 func main() {
-	// Initialize custom logger
 	log.SetOutput(&LogRotator{})
-	// Also print to stdout for dev
-	// log.SetOutput(io.MultiWriter(os.Stdout, &LogRotator{})) 
-
 	localIP = getLocalIP()
-
 	os.MkdirAll(DownloadPath, 0755)
 	
 	var err error
@@ -147,6 +135,7 @@ func main() {
 	http.HandleFunc("/api/search", handleSearch)
 	http.HandleFunc("/api/retry", handleRetry)
 	http.HandleFunc("/api/update_ytdlp", handleUpdateYTDLP)
+	http.HandleFunc("/api/shutdown", handleShutdown)
 	http.HandleFunc("/add", handleAdd)
 	http.HandleFunc("/skip", handleSkip)
 	http.HandleFunc("/delete", handleDelete)
@@ -200,7 +189,6 @@ func getMPVRemaining() string {
 	if err != nil { return "" }
 	defer c.Close()
 	c.SetDeadline(time.Now().Add(200 * time.Millisecond))
-
 	c.Write([]byte(`{"command": ["get_property", "time-remaining"]}` + "\n"))
 	buf := make([]byte, 1024)
 	n, err := c.Read(buf)
@@ -238,6 +226,17 @@ func handleUpdateYTDLP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Println("Update successful!")
+	w.WriteHeader(http.StatusOK)
+}
+
+func handleShutdown(w http.ResponseWriter, r *http.Request) {
+	log.Println("Received Shutdown Request. Powering off...")
+	cmd := exec.Command("sudo", "poweroff")
+	if err := cmd.Start(); err != nil {
+		log.Printf("Shutdown failed: %v", err)
+		http.Error(w, "Shutdown failed", 500)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -282,18 +281,14 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 	if query == "" { return }
 	if !strings.Contains(strings.ToLower(query), "karaoke") { query += " karaoke" }
 	
-	// STRATEGY 1: PARALLEL API REQUESTS
 	type APIResult struct {
 		Items []InvidiousItem
 		Error error
 	}
-	
 	resultChan := make(chan APIResult, 1) 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second) 
 	defer cancel()
-
 	var wg sync.WaitGroup
-
 	log.Printf("[SEARCH] Searching for: %s", query)
 
 	for _, apiBase := range InvidiousInstances {
@@ -303,10 +298,8 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 			req, _ := http.NewRequestWithContext(ctx, "GET", urlStr+"?q="+url.QueryEscape(query), nil)
 			client := &http.Client{}
 			resp, err := client.Do(req)
-			
 			if err != nil { return }
 			defer resp.Body.Close()
-
 			if resp.StatusCode == 200 {
 				var items []InvidiousItem
 				if err := json.NewDecoder(resp.Body).Decode(&items); err == nil && len(items) > 0 {
@@ -328,13 +321,9 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		log.Println("[SEARCH] API Timeout. Switching to local fallback.")
 	}
 
-	// STRATEGY 2: LOCAL FALLBACK
-	// --js-runtimes node is critical here for speed
 	searchFlags := []string{
 		"--print", "%(id)s<|>%(title)s<|>%(uploader)s<|>%(duration_string)s", 
-		"--flat-playlist", 
-		"--no-warnings",
-		"--js-runtimes", "node", 
+		"--flat-playlist", "--no-warnings", "--js-runtimes", "node", 
 	}
 	if _, err := os.Stat("cookies.txt"); err == nil {
 		searchFlags = append([]string{"--cookies", "cookies.txt"}, searchFlags...)
@@ -342,10 +331,8 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 	searchFlags = append(searchFlags, "ytsearch5:"+query)
 
 	log.Printf("[CMD] yt-dlp %s", strings.Join(searchFlags, " "))
-
 	cmd := exec.Command(YtDlpPath, searchFlags...)
 	output, err := cmd.Output()
-	
 	if err != nil {
 		log.Printf("[SEARCH ERROR] %v", err)
 		http.Error(w, "Search failed", 500)
@@ -358,20 +345,13 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		line := scanner.Text()
 		parts := strings.Split(line, "<|>")
 		if len(parts) < 4 { continue }
-
-		id, title, uploader, dur := parts[0], parts[1], parts[2], parts[3]
-		
 		res := SearchResult{
-			ID:       id,
-			Title:    title,
-			Uploader: uploader,
-			Duration: dur,
-			URL:      "https://www.youtube.com/watch?v=" + id,
-			Thumb:    fmt.Sprintf("https://i.ytimg.com/vi/%s/mqdefault.jpg", id),
+			ID: parts[0], Title: parts[1], Uploader: parts[2], Duration: parts[3],
+			URL: "https://www.youtube.com/watch?v=" + parts[0],
+			Thumb: fmt.Sprintf("https://i.ytimg.com/vi/%s/mqdefault.jpg", parts[0]),
 		}
 		results = append(results, res)
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(results)
 }
@@ -381,17 +361,12 @@ func sendSearchResults(w http.ResponseWriter, items []InvidiousItem) {
 	for _, item := range items {
 		if item.Type != "video" { continue }
 		res := SearchResult{
-			ID:       item.VideoID,
-			Title:    item.Title,
-			Uploader: item.Author,
-			URL:      "https://www.youtube.com/watch?v=" + item.VideoID,
+			ID: item.VideoID, Title: item.Title, Uploader: item.Author,
+			URL: "https://www.youtube.com/watch?v=" + item.VideoID,
 			Duration: fmt.Sprintf("%d:%02d", item.Length/60, item.Length%60),
+			Thumb: fmt.Sprintf("https://i.ytimg.com/vi/%s/mqdefault.jpg", item.VideoID),
 		}
-		if len(item.Thumbnails) > 0 {
-			res.Thumb = item.Thumbnails[0].URL
-		} else {
-			res.Thumb = fmt.Sprintf("https://i.ytimg.com/vi/%s/mqdefault.jpg", item.VideoID)
-		}
+		if len(item.Thumbnails) > 0 { res.Thumb = item.Thumbnails[0].URL }
 		results = append(results, res)
 		if len(results) >= 10 { break }
 	}
@@ -448,10 +423,8 @@ func downloadWorker() {
 		formatFlags := []string{
 			"--newline", "--no-playlist", 
 			"-f", "best[height<=480]/bestvideo[height<=480]+bestaudio/best", 
-			// FIX: Using the Node runtime for speed
 			"--js-runtimes", "node",
 		}
-
 		if _, err := os.Stat("cookies.txt"); err == nil {
 			formatFlags = append(formatFlags, "--cookies", "cookies.txt")
 		}
@@ -470,7 +443,6 @@ func downloadWorker() {
 
 		runArgs := append(formatFlags, "-o", outTmpl, url)
 		log.Printf("[CMD] Job %d: yt-dlp %s", id, strings.Join(runArgs, " "))
-
 		cmd := exec.Command(YtDlpPath, runArgs...)
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
@@ -489,12 +461,9 @@ func downloadWorker() {
 		isFinalizing := false
 		for scanner.Scan() {
 			line := scanner.Text()
-			
-			// Log speed/warnings for debugging
 			if strings.Contains(line, "MiB/s") || strings.Contains(line, "ERROR") || strings.Contains(line, "WARNING") {
 				log.Printf("[DL %d] %s", id, line)
 			}
-
 			if isFinalizing { continue }
 			if strings.Contains(line, "[Merger]") || strings.Contains(line, "Merging formats") || strings.Contains(line, "100%") {
 				isFinalizing = true
@@ -542,30 +511,10 @@ func playerWorker() {
 		err := db.QueryRow("SELECT id, filename, title FROM jobs WHERE status = 'ready' ORDER BY id ASC LIMIT 1").Scan(&id, &f, &title)
 		
 		if err != nil { 
-			playerMutex.Lock()
-			if idleCmd == nil {
-				idleCmd = exec.Command("mpv", 
-					"--fs", "--ontop",
-					"--vo=x11", 
-					"--loop-file=inf", 
-					"--image-display-duration=inf",
-					BackgroundImage)
-				idleCmd.Env = append(os.Environ(), "DISPLAY=:0")
-				idleCmd.Start()
-				log.Println("Entering Idle Mode")
-			}
-			playerMutex.Unlock()
+			// No song? Just wait. The wallpaper is already there.
 			time.Sleep(1 * time.Second) 
 			continue 
 		}
-
-		playerMutex.Lock()
-		if idleCmd != nil {
-			if idleCmd.Process != nil { idleCmd.Process.Kill() }
-			idleCmd = nil
-			log.Println("Exiting Idle Mode")
-		}
-		playerMutex.Unlock()
 
 		log.Printf("Attempting to play: %s", title)
 		db.Exec("UPDATE jobs SET status = 'playing' WHERE id = ?", id)
@@ -605,6 +554,9 @@ func playerWorker() {
 		playerMutex.Unlock()
 		
 		db.Exec("UPDATE jobs SET status = 'played' WHERE id = ?", id)
+		
+		log.Println("Song finished. Pausing for 5s (Show QR)...")
+		time.Sleep(5 * time.Second)
 	}
 }
 
@@ -616,7 +568,8 @@ func osdManager() {
 		var s, t string
 		err := db.QueryRow("SELECT singer, title FROM jobs WHERE status = 'ready' LIMIT 1").Scan(&s, &t)
 		
-		osdText := fmt.Sprintf("📷 Scan QR between songs | Join: http://%s:%s", localIP, "8080")
+		// FIX: Updated Text
+		osdText := fmt.Sprintf("Join: http://%s:%s", localIP, "8080")
 		if err == nil {
 			osdText += fmt.Sprintf("                                  UP NEXT: %s (%s)", s, t)
 		}
