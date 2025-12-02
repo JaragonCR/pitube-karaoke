@@ -18,7 +18,7 @@ echo -e "${GREEN}=========================================${NC}"
 echo -e "${GREEN}   PiTube Karaoke Installer (Pi 3B+)     ${NC}"
 echo -e "${GREEN}=========================================${NC}"
 
-# 1. UPGRADE NODE.JS TO v20 (Required for High-Speed YouTube Downloads)
+# 1. UPGRADE NODE.JS TO v20
 log_info "Upgrading Node.js to v20 (Required for yt-dlp speed)..."
 sudo apt remove -y nodejs npm
 sudo apt autoremove -y
@@ -63,30 +63,45 @@ go mod tidy
 go build -o pitube
 chmod +x run.sh gen_ui.sh
 
-# 5. SETUP AUTOSTART (Autorun on Boot)
-log_info "Configuring Autostart..."
-mkdir -p "$HOME/.config/autostart"
-cat << EOF > "$HOME/.config/autostart/pitube.desktop"
-[Desktop Entry]
-Type=Application
-Name=PiTube Karaoke
-Exec=$INSTALL_DIR/run.sh
-Terminal=false
-Hidden=false
-EOF
+# 5. SETUP SEAMLESS AUTOSTART (LXDE Injection)
+log_info "Configuring Seamless Autostart..."
 
-# 6. DISABLE SCREENSAVER
-log_info "Disabling Screensaver..."
-LXDE_CONFIG="/etc/xdg/lxsession/LXDE-pi/autostart"
-[ ! -f "$LXDE_CONFIG" ] && LXDE_CONFIG="/etc/xdg/lxsession/LXDE/autostart"
+# A. Clean up old .desktop method (which causes visible windows)
+rm -f "$HOME/.config/autostart/pitube.desktop"
 
-if ! grep -q "xset s off" "$LXDE_CONFIG"; then
-    sudo bash -c "echo '@xset s noblank' >> $LXDE_CONFIG"
-    sudo bash -c "echo '@xset s off' >> $LXDE_CONFIG"
-    sudo bash -c "echo '@xset -dpms' >> $LXDE_CONFIG"
+# B. Setup LXDE Session folder
+LXDE_DIR="$HOME/.config/lxsession/LXDE-pi"
+mkdir -p "$LXDE_DIR"
+
+# C. Create autostart file if missing
+if [ ! -f "$LXDE_DIR/autostart" ]; then
+    if [ -f "/etc/xdg/lxsession/LXDE-pi/autostart" ]; then
+        cp "/etc/xdg/lxsession/LXDE-pi/autostart" "$LXDE_DIR/autostart"
+    else
+        # Fallback default
+        echo "@lxpanel --profile LXDE-pi" > "$LXDE_DIR/autostart"
+        echo "@pcmanfm --desktop --profile LXDE-pi" >> "$LXDE_DIR/autostart"
+        echo "@xscreensaver -no-splash" >> "$LXDE_DIR/autostart"
+    fi
+fi
+
+# D. Inject our script if not present
+if ! grep -q "pitube-karaoke/run.sh" "$LXDE_DIR/autostart"; then
+    echo "@bash $INSTALL_DIR/run.sh" >> "$LXDE_DIR/autostart"
+    log_info "Added to LXDE Autostart."
+else
+    log_info "Already in Autostart."
+fi
+
+# 6. DISABLE SCREENSAVER (Prevent screen sleeping)
+log_info "Disabling Screensaver logic..."
+if ! grep -q "xset s off" "$LXDE_DIR/autostart"; then
+    echo "@xset s noblank" >> "$LXDE_DIR/autostart"
+    echo "@xset s off" >> "$LXDE_DIR/autostart"
+    echo "@xset -dpms" >> "$LXDE_DIR/autostart"
 fi
 
 echo ""
 echo -e "${GREEN}SUCCESS!${NC} Setup complete."
 echo -e "1. Place your 'cookies.txt' in: $INSTALL_DIR/cookies.txt"
-echo -e "2. Reboot to start Kiosk mode."
+echo -e "2. Reboot to start Kiosk mode (No terminal window)."
