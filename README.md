@@ -63,19 +63,10 @@ Run Manually
 Setup Autostart: To make it start on boot, create this file:
 
 ```bash
-mkdir -p ~/.config/autostart
-nano ~/.config/autostart/pitube.desktop
-```
-
-Paste this (update /home/YOUR_USER to your actual path):
-
-```bash
-[Desktop Entry]
-Type=Application
-Name=PiTube Karaoke
-Exec=/home/YOUR_USER/pitube-karaoke/run.sh
-Terminal=false
-Hidden=false
+mkdir -p ~/.config/lxsession/LXDE-pi/
+cp /etc/xdg/lxsession/LXDE-pi/autostart ~/.config/lxsession/LXDE-pi/
+echo "@bash $HOME/pitube-karaoke/run.sh" >> ~/.config/lxsession/LXDE-pi/autostart
+echo "@xset s off" >> ~/.config/lxsession/LXDE-pi/autostart
 ```
 
 🍪 Fixing 403 Forbidden Errors (Optional)
@@ -101,3 +92,4 @@ The song will download and start playing automatically on the TV!
 Update System: There is an "Update System" link at the bottom of the web interface to update the downloader.
 Logs: Check pitube_debug.log if something goes wrong (it auto-rotates at 1MB).
 Clear Database: Delete the pitube.db file to reset your history/queue.
+Power Off: Use the red "Power Off" button in the web interface to safely shut down the Pi.
